@@ -25,25 +25,30 @@ function Login({ onLogin }) {
         body: JSON.stringify(formData)
       });
 
-      // Check if response is JSON
+      // Ensure response is JSON
       const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
+      let data = {};
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
         const text = await response.text();
         throw new Error(`Server returned non-JSON response: ${text.slice(0, 100)}...`);
       }
 
-      const data = await response.json();
-      
       if (response.ok) {
         setMessage(isLogin ? 'Login successful!' : 'Registration successful!');
         if (isLogin && onLogin) {
+          // Make sure token and user_id exist
+          if (!data.session_token || !data.user_id) {
+            throw new Error('Login response missing session_token or user_id');
+          }
           onLogin(data.session_token, data.user_id);
         }
       } else {
         setMessage(data.error || 'An error occurred');
       }
     } catch (err) {
-      setMessage('Network error. Please try again.');
+      setMessage(`Error: ${err.message}`);
       console.error('Login error:', err);
     } finally {
       setLoading(false);
@@ -122,7 +127,7 @@ function Login({ onLogin }) {
       
       {message && (
         <div className={`mt-4 p-3 rounded-md text-center ${
-          message.includes('success') 
+          message.toLowerCase().includes('success') 
             ? 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200' 
             : 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
         }`}>

@@ -17,7 +17,6 @@ function UserSessions({ userId, sessionToken, onLoadSession }) {
     setError('');
 
     try {
-      // Updated endpoint to match backend: fetch user sessions
       const data = await apiFetch(`/user-sessions/${userId}`, {
         headers: { Authorization: `Bearer ${sessionToken}` },
       });
@@ -34,18 +33,51 @@ function UserSessions({ userId, sessionToken, onLoadSession }) {
     if (userId && sessionToken) loadSessions();
   }, [userId, sessionToken, loadSessions]);
 
-  const handleLoadSession = (session) => {
-    if (onLoadSession) onLoadSession(session);
+  const handleLoadSession = async (session) => {
+    if (!onLoadSession) return;
+
+    try {
+      // Fetch full chat messages for the session
+      const data = await apiFetch(`/chat-messages/${session.session_id}`, {
+        headers: { Authorization: `Bearer ${sessionToken}` },
+      });
+
+      // Robust mapping: ensure text is always picked up
+      const mappedMessages = (data.messages || []).map((m) => {
+        // Use .messagetext first, support .text etc as fallbacks
+        const text = m.text ?? m.messagetext ?? m.message_text ?? m.question ?? '';
+        const createdAt = m.created_at ?? m.createdAt ?? m.createdat ?? null;
+        const timestamp = createdAt ? new Date(createdAt) : new Date();
+        const citations = m.citations ?? [];
+        let sender = m.sender ?? 'Unknown';
+        if (sender.toLowerCase() === 'user') sender = 'You';
+        if (sender.toLowerCase().includes('assistant') || sender.toLowerCase() === 'ai') sender = 'AI';
+        return { sender, text, timestamp, citations };
+      });
+
+      // Pass to parent
+      onLoadSession({
+        session_id: session.session_id,
+        messages: mappedMessages,
+      });
+    } catch (err) {
+      console.error('Failed to load session messages:', err);
+      alert('Failed to load session messages. Please try again.');
+    }
   };
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    try {
+      return new Date(dateString).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return dateString;
+    }
   };
 
   if (!userId || !sessionToken) {
